@@ -32,7 +32,7 @@ Run the complete workflow:
 ```bash
 mkdir -p ~/projects/vic-mf6-manuscript
 cd ~/projects/vic-mf6-manuscript
-git clone --recurse-submodules --branch manuscript https://github.com/mabdazzam/vic-mf6.git vic-mf6
+git clone --recurse-submodules --branch framework https://github.com/mabdazzam/vic-mf6.git vic-mf6
 git clone --branch manuscript https://github.com/mabdazzam/vic-mf6-workflow.git vic-mf6-workflow
 git clone --branch manuscript https://github.com/mabdazzam/vic-mf6-paper.git vic-mf6-paper
 python3 -m venv .venv
