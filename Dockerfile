@@ -11,7 +11,7 @@ RUN /opt/venv/bin/python -m pip install --no-cache-dir \
 COPY manuscript /opt/vic-mf6-workflow/manuscript
 COPY examples /opt/vic-mf6-workflow/examples
 COPY scripts /opt/vic-mf6-workflow/scripts
-RUN chown -R vicmf6:vicmf6 /opt/vic-mf6-workflow
+RUN chown -R vicmf6 /opt/vic-mf6-workflow
 
 USER vicmf6
 WORKDIR /work
