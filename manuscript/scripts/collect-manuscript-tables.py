@@ -12,16 +12,23 @@ import pandas as pd
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--run-dir", type=Path, required=True)
+    p.add_argument("--analysis-dir", type=Path)
     p.add_argument("--output-dir", type=Path, required=True)
     a = p.parse_args()
     root = a.run_dir.resolve()
+    analysis_root = (a.analysis_dir or root).resolve()
     out = a.output_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
     sources = []
 
     def save(data, name, source):
         data.to_csv(out / name, index=False)
-        sources.append(dict(table=name, source=str(Path(source).relative_to(root))))
+        source = Path(source).resolve()
+        try:
+            relative = source.relative_to(root)
+        except ValueError:
+            relative = Path("analysis") / source.relative_to(analysis_root)
+        sources.append(dict(table=name, source=str(relative)))
 
     def copy(source, name=None):
         save(pd.read_csv(source), name or source.name, source)
@@ -70,7 +77,7 @@ def main():
             path = acceptance / f"{name}.csv"
             frame = pd.read_csv(path).drop(columns=["source_files"], errors="ignore")
             save(frame, "data-" + name.replace("_", "-") + ".csv", path)
-        for path in sorted((root / "groundwater-control").glob("data-*.csv")):
+        for path in sorted((analysis_root / "groundwater-control").glob("data-*.csv")):
             copy(path)
     for directory, prefix, files in [
         ("reference", "coupled-reference", ["summary", "traces"]),
@@ -85,10 +92,13 @@ def main():
             copy(root / directory / source_name, f"data-{prefix}-{suffix}.csv")
     if (root / "nonlinear/kernel-checks.csv").exists():
         copy(root / "nonlinear/kernel-checks.csv", "data-nonlinear-kernel-checks.csv")
-    # The campaign analyzers write directly to run-dir/tables.
-    if (root / "tables").resolve() != out:
-        for path in sorted((root / "tables").glob("data-*.csv")):
-            copy(path)
+    # Analysis stages may already have written compact tables directly to the
+    # requested output directory. Register those files without copying them
+    # over themselves so their provenance is retained.
+    recorded = {row["table"] for row in sources}
+    for path in sorted(out.glob("data-*.csv")):
+        if path.name not in recorded:
+            sources.append(dict(table=path.name, source=str(Path("tables") / path.name)))
     pd.DataFrame(sources).to_csv(out / "table-provenance.csv", index=False)
     print(f"Collected {len(sources)} tables in {out}")
 

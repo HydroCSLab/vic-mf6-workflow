@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the manuscript's numerical tests and process experiments in fresh folders."""
+"""Run the manuscript experiments with raw runs and analysis kept separate."""
 import argparse
 import csv
 import hashlib
@@ -23,7 +23,9 @@ def _ansi(code, text, enabled):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--run-dir", type=Path)
+    parser.add_argument("--analysis-dir", type=Path)
+    parser.add_argument("--output-dir", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--install-dir", type=Path, default=Path("/opt/vicmf6"))
     parser.add_argument("--workflow-dir", type=Path, default=Path("/opt/vic-mf6-workflow"))
     parser.add_argument("--workers", type=int, default=2)
@@ -32,22 +34,32 @@ def main():
     selected = args.stages.split(",")
     if args.workers < 1 or not selected or any(s not in STAGES for s in selected) or len(set(selected)) != len(selected):
         parser.error("Provide a positive worker count and unique valid stages: " + ",".join(STAGES))
-    out = args.output_dir.resolve()
-    out.mkdir(parents=True, exist_ok=True)
-    if any(out.iterdir()):
-        parser.error("Output directory must be empty; previous runs are never overwritten.")
+    if args.output_dir and (args.run_dir or args.analysis_dir):
+        parser.error("Use --output-dir by itself, or use --run-dir and --analysis-dir together.")
+    if args.output_dir:
+        run_out = analysis_out = args.output_dir.resolve()
+    elif args.run_dir and args.analysis_dir:
+        run_out = args.run_dir.resolve()
+        analysis_out = args.analysis_dir.resolve()
+    else:
+        parser.error("Provide --run-dir and --analysis-dir.")
+    for directory in {run_out, analysis_out}:
+        directory.mkdir(parents=True, exist_ok=True)
+        if any(directory.iterdir()):
+            parser.error(f"Output directory must be empty; previous runs are never overwritten: {directory}")
     scripts = Path(__file__).resolve().parent
     install = args.install_dir.resolve()
     workflow = args.workflow_dir.resolve()
     coupler = install / "src/vic-mf6"
-    logs = out / "logs"
+    logs = analysis_out / "logs"
     logs.mkdir()
-    tables = out / "tables"
+    tables = analysis_out / "tables"
     tables.mkdir()
     host_output = os.environ.get("VICMF6_HOST_OUTPUT_DIR")
     if host_output:
         print(f"Host output directory: {host_output}", flush=True)
-        print(f"Container output directory: {out}", flush=True)
+        print(f"Container run directory: {run_out}", flush=True)
+        print(f"Container analysis directory: {analysis_out}", flush=True)
     env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", NUMEXPR_NUM_THREADS="1")
     env["PYTHONUNBUFFERED"] = "1"
     color_setting = os.environ.get("VICMF6_COLOR", "auto").lower()
@@ -56,12 +68,12 @@ def main():
     cyan = lambda text: _ansi(36, text, color)
     green = lambda text: _ansi(32, text, color)
     red = lambda text: _ansi(31, text, color)
-    shutil.copy2(install / "share/component-revisions.txt", out / "component-revisions.txt")
-    with (out / "python-packages.csv").open("w", newline="") as stream:
+    shutil.copy2(install / "share/component-revisions.txt", analysis_out / "component-revisions.txt")
+    with (analysis_out / "python-packages.csv").open("w", newline="") as stream:
         writer = csv.writer(stream)
         writer.writerow(["package", "version"])
         writer.writerows(sorted((d.metadata["Name"], d.version) for d in importlib.metadata.distributions()))
-    with (out / "source-hashes.csv").open("w", newline="") as stream:
+    with (analysis_out / "source-hashes.csv").open("w", newline="") as stream:
         writer = csv.writer(stream)
         writer.writerow(["file", "sha256"])
         for root in [workflow, coupler / "src", coupler / "tests", install / "examples/stehekin"]:
@@ -94,7 +106,7 @@ def main():
                 sys.stdout.flush()
             returncode = process.wait()
         records.append([name, returncode, time.monotonic() - start])
-        with (out / "execution.csv").open("w", newline="") as stream:
+        with (analysis_out / "execution.csv").open("w", newline="") as stream:
             writer = csv.writer(stream)
             writer.writerow(["stage", "exit_code", "seconds"])
             writer.writerows(records)
@@ -111,35 +123,38 @@ def main():
         run("mpi-collectives", [coupler / "scripts/run_mpi_smoke.sh"], coupler)
         run("mpi-failure", [coupler / "scripts/run_mpi_failure_smoke.sh"], coupler)
     if "acceptance" in selected:
-        run("acceptance", [install / "bin/container-entrypoint", "acceptance", out / "acceptance"])
-        script("run-groundwater-control", "--acceptance-dir", out / "acceptance",
-               "--output-dir", out / "groundwater-control", "--install-dir", install)
+        run("acceptance", [install / "bin/container-entrypoint", "acceptance", run_out / "acceptance"])
+        script("run-groundwater-control", "--acceptance-dir", run_out / "acceptance",
+               "--output-dir", analysis_out / "groundwater-control", "--install-dir", install)
     if "verification" in selected:
-        script("run-verification", "--output-dir", out / "verification", "--install-dir", install)
+        script("run-verification", "--output-dir", run_out / "verification", "--install-dir", install)
     if "process" in selected:
-        run("process", [workflow / "examples/stehekin/experiments/run-feedback-campaign.sh", out / "process"])
-        script("create-data-process-figures", "--campaign-dir", out / "process", "--output-dir", tables)
+        run("process", [workflow / "examples/stehekin/experiments/run-feedback-campaign.sh", run_out / "process"])
+        script("create-data-process-figures", "--campaign-dir", run_out / "process", "--output-dir", tables)
     if "reference" in selected:
-        script("run-coupled-reference", "--output-dir", out / "reference", "--install-dir", install)
+        script("run-coupled-reference", "--output-dir", run_out / "reference", "--install-dir", install)
         inputs = install / "examples/stehekin/input"
-        script("create-data-nonlinear-reference", "--output-dir", out / "nonlinear-reference",
+        script("create-data-nonlinear-reference", "--output-dir", run_out / "nonlinear-reference",
                "--parameter-file", inputs / "stehekin_parameters_20160327.nc",
                "--domain-file", inputs / "domain_stehekin_20151028.nc")
-        script("run-nonlinear-interface-reference", "--output-dir", out / "nonlinear",
-               "--install-dir", install, "--reference-dir", out / "nonlinear-reference")
+        script("run-nonlinear-interface-reference", "--output-dir", run_out / "nonlinear",
+               "--install-dir", install, "--reference-dir", run_out / "nonlinear-reference")
     if "robustness" in selected:
-        script("run-robustness-campaign", "--output-dir", out / "robustness", "--install-dir", install, "--workflow-dir", workflow, "--workers", args.workers)
-        script("analyze-robustness-campaign", "--campaign-dir", out / "robustness", "--output-dir", tables)
+        script("run-robustness-campaign", "--output-dir", run_out / "robustness", "--install-dir", install, "--workflow-dir", workflow, "--workers", args.workers)
+        script("analyze-robustness-campaign", "--campaign-dir", run_out / "robustness", "--output-dir", tables)
     if "initialization" in selected:
-        script("run-review-campaign", "--output-dir", out / "initialization", "--install-dir", install, "--workflow-dir", workflow, "--workers", args.workers)
-        script("analyze-review-campaign", "--campaign-dir", out / "initialization", "--output-dir", tables)
-        script("run-spatial-mapping-diagnostic", "--campaign-dir", out / "initialization", "--output-dir", tables, "--coupler-dir", coupler)
-    script("collect-manuscript-tables", "--run-dir", out, "--output-dir", tables)
-    (out / "completion.txt").write_text("Completed stages: " + ", ".join(selected) + "\n")
+        script("run-review-campaign", "--output-dir", run_out / "initialization", "--install-dir", install, "--workflow-dir", workflow, "--workers", args.workers)
+        script("analyze-review-campaign", "--campaign-dir", run_out / "initialization", "--output-dir", tables)
+        script("run-spatial-mapping-diagnostic", "--campaign-dir", run_out / "initialization", "--output-dir", tables, "--coupler-dir", coupler)
+    script("collect-manuscript-tables", "--run-dir", run_out, "--analysis-dir", analysis_out,
+           "--output-dir", tables)
+    (analysis_out / "completion.txt").write_text("Completed stages: " + ", ".join(selected) + "\n")
     if host_output:
-        print(f"[OK] completed {', '.join(selected)}; host outputs: {host_output}", flush=True)
+        print(f"[OK] completed {', '.join(selected)}; host run files: {host_output}/runs", flush=True)
+        print(f"[OK] host analysis files: {host_output}/analysis", flush=True)
     else:
-        print(f"[OK] completed {', '.join(selected)}; container outputs: {out}", flush=True)
+        print(f"[OK] completed {', '.join(selected)}; container run files: {run_out}", flush=True)
+        print(f"[OK] container analysis files: {analysis_out}", flush=True)
 
 
 if __name__ == "__main__":

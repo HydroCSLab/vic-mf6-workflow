@@ -6,9 +6,9 @@
 
 set -euo pipefail
 
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 image=${VICMF6_WORKFLOW_IMAGE:-vic-mf6-workflow:manuscript}
-output_dir=${1:-"$repo_dir/results/manuscript-campaign"}
+output_dir=${1:-"$project_dir/runs/vic-mf6-process"}
 
 if [ "$#" -gt 1 ]; then
     printf 'usage: %s [OUTPUT_DIRECTORY]\n' "$0" >&2

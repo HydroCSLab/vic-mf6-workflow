@@ -6,13 +6,11 @@ import sys
 
 
 def get_project_dir():
-    """Return the parent directory containing the workflow and paper checkouts."""
+    """Return the workflow project directory containing generated outputs."""
     path = Path(__file__).resolve()
     for candidate in path.parents:
-        if (candidate / "examples" / "manuscript").is_dir():
-            return candidate.parent
         if (candidate / "manuscript" / "scripts").is_dir() and (candidate / "examples" / "stehekin").is_dir():
-            return candidate.parent
+            return candidate
     sys.exit("This script must be located in a workflow or vic-mf6 checkout.")
 
 
@@ -24,7 +22,12 @@ def find_paper_dir():
     """Find the sibling paper checkout in the project directory."""
     configured = os.environ.get("VICMF6_PAPER_DIR")
     candidates = [Path(configured)] if configured else []
-    candidates += [project_dir / "vic-mf6-paper", project_dir / "vic-mf6-paper-submit"]
+    candidates += [
+        project_dir / "vic-mf6-paper",
+        project_dir / "vic-mf6-paper-submit",
+        project_dir.parent / "vic-mf6-paper",
+        project_dir.parent / "vic-mf6-paper-submit",
+    ]
     for candidate in candidates:
         if candidate and (candidate / "manuscript").is_dir():
             return candidate.resolve()

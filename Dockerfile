@@ -4,9 +4,10 @@ ARG VICMF6_IMAGE=vic-mf6:manuscript
 FROM ${VICMF6_IMAGE}
 
 USER root
-COPY requirements-workflow.txt /tmp/requirements-workflow.txt
+COPY requirements-workflow.txt /opt/requirements-workflow.txt
 RUN /opt/venv/bin/python -m pip install --no-cache-dir \
-        --requirement /tmp/requirements-workflow.txt
+        --requirement /opt/requirements-workflow.txt \
+    && rm -f /opt/requirements-workflow.txt
 
 COPY manuscript /opt/vic-mf6-workflow/manuscript
 COPY examples /opt/vic-mf6-workflow/examples

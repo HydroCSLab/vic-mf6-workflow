@@ -36,9 +36,10 @@ for required in "$example_dir/input/domain_stehekin_20151028.nc" \
     fi
 done
 
-sample_dir=$(mktemp -d "${TMPDIR:-/tmp}/vicmf6-feedback-sample.XXXXXX")
+sample_dir="$output_root/.work/sample"
+mkdir -p -- "$sample_dir"
 cleanup() {
-    rm -rf -- "$sample_dir"
+    rm -rf -- "$output_root/.work"
 }
 trap cleanup EXIT
 
