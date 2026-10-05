@@ -1,0 +1,8 @@
+/data/
+/inputs/
+/models/
+/runs/
+/analysis/
+/.venv/
+__pycache__/
+*.pyc
