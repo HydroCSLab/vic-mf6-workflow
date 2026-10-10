@@ -30,16 +30,11 @@ mkdir -p ~/projects/nmhydro
 cd ~/projects/nmhydro
 
 # Clone the reusable framework.
-git clone --recurse-submodules --branch framework \
-  https://github.com/mabdazzam/vic-mf6.git vic-mf6
+git clone --recurse-submodules \
+  https://github.com/HydroCSLab/vic-mf6.git vic-mf6
 
 # Clone this workflow.
-git clone --branch manuscript \
-  https://github.com/mabdazzam/vic-mf6-workflow.git vic-mf6-workflow
-
-# Clone the manuscript source.
-git clone --branch manuscript \
-  https://github.com/mabdazzam/vic-mf6-paper.git vic-mf6-paper
+git clone https://github.com/HydroCSLab/vic-mf6-workflow.git vic-mf6-workflow
 
 # Build the reusable framework image.
 cd ~/projects/nmhydro/vic-mf6
@@ -63,10 +58,6 @@ find analysis/vic-mf6-manuscript -maxdepth 2 -type f | sort
 # Display the execution record and generated manuscript tables.
 cat analysis/vic-mf6-manuscript/execution.csv
 find analysis/vic-mf6-manuscript/tables -maxdepth 1 -type f | sort
-
-# Build the manuscript after reviewing the generated CSV inputs.
-cd ../vic-mf6-paper
-make -C manuscript
 ```
 
 Use a new empty run and analysis directory for another run. To run only a
@@ -76,10 +67,20 @@ quick smoke test:
 # Return to the workflow checkout.
 cd ~/projects/nmhydro/vic-mf6-workflow
 
-# Run the unit, acceptance, and verification stages only.
+# Run the unit tests and packaged acceptance case.
 VICMF6_RUNS_DIR="$PWD/runs/vic-mf6-smoke" \
 VICMF6_ANALYSIS_DIR="$PWD/analysis/vic-mf6-smoke" \
-./scripts/run-manuscript.sh --stages unit,acceptance,verification --workers 2
+./scripts/run-manuscript.sh --stages unit,acceptance --workers 2
+```
+
+Building the paper PDF is optional. `HydroCSLab/vic-mf6-paper` is private,
+so this step requires repository access, GitHub SSH authentication, and the
+LaTeX tools documented in that repository:
+
+```bash
+cd ~/projects/nmhydro
+git clone git@github.com:HydroCSLab/vic-mf6-paper.git vic-mf6-paper
+make -C vic-mf6-paper/manuscript
 ```
 
 ## macOS
