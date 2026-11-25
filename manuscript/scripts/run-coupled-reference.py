@@ -25,7 +25,9 @@ def main():
     shutil.copy2(__file__, a.output_dir/Path(__file__).name)
     with (a.output_dir/'source-hashes.csv').open('w') as f:
         w=csv.writer(f);w.writerow(['file','sha256'])
-        for file in [Path(__file__),a.install_dir/'lib/libmf6.so',a.install_dir/'src/vic-mf6/src/vicmf6/mf6.py']:
+        sources = [Path(__file__), a.install_dir/'lib/libmf6.so']
+        sources.extend(sorted((a.install_dir/'src/vic-mf6/src/vicmf6').rglob('*.py')))
+        for file in sources:
             w.writerow([str(file),hashlib.sha256(file.read_bytes()).hexdigest()])
     import flopy
     import numpy as np

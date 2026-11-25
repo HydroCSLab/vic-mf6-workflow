@@ -40,8 +40,11 @@ def main():
     from vicmf6.mf6 import Mf6Runtime
     source=a.install_dir/'src/vic/vic/vic_run/src/calc_groundwater_exchange.c'
     include=source.parents[1]/'include'
+    shared=source.parents[2]/'drivers/shared_all'
+    logging_sources=[shared/'src/vic_log.c',shared/'src/open_file.c']
     wrapper=out/'kernel-wrapper.c'
-    wrapper.write_text('''#include <vic_run.h>
+    wrapper.write_text('''#define _MAIN_
+#include <vic_run.h>
 double evaluate(double storage, double ice, double maximum, double residual,
                 double depth, double bubble, double exponent, double head,
                 double length, double conductivity, int steps) {
@@ -52,8 +55,8 @@ double evaluate(double storage, double ice, double maximum, double residual,
                                           length,conductivity,1.0,steps);
 }
 ''')
-    subprocess.run(['gcc','-O2','-shared','-fPIC','-I'+str(include),str(source),str(wrapper),'-lm','-o',str(out/'kernel.so')],check=True)
-    lib=ctypes.CDLL(str(out/'kernel.so'));kernel=lib.evaluate
+    subprocess.run(['gcc','-O2','-shared','-fPIC','-Wl,-z,defs','-I'+str(include),'-I'+str(shared/'include'),str(source),*map(str,logging_sources),str(wrapper),'-lm','-o',str(out/'kernel.so')],check=True)
+    lib=ctypes.CDLL(str(out/'kernel.so'));lib.initialize_log();kernel=lib.evaluate
     kernel.argtypes=[ctypes.c_double]*10+[ctypes.c_int];kernel.restype=ctypes.c_double
     params=a.install_dir/'examples/stehekin/input/stehekin_parameters_20160327.nc'
     domain=a.install_dir/'examples/stehekin/input/domain_stehekin_20151028.nc'
@@ -69,7 +72,7 @@ double evaluate(double storage, double ice, double maximum, double residual,
         return kernel(storage,ice,capacity,res,depth,bubble,expt,head,length,k,steps)
     metadata=[dict(parameter=k,value=v) for k,v in dict(row=r,col=c,depth_m=depth,capacity_mm=capacity,bubble_cm=bubble,expt=expt,conductivity_mm_day=conductivity,length_m=length,groundwater_storage_mm_per_m=cg).items()]
     write_csv(out/'parameters.csv',metadata)
-    sources=[source,params,a.install_dir/'bin/vic_image.exe',a.install_dir/'lib/libmf6.so',Path(__file__)]
+    sources=[source,*logging_sources,params,a.install_dir/'bin/vic_image.exe',a.install_dir/'lib/libmf6.so',Path(__file__)]
     write_csv(out/'source-hashes.csv',[dict(file=str(s),sha256=hashlib.sha256(s.read_bytes()).hexdigest()) for s in sources])
     shutil.copy2(__file__,out/Path(__file__).name);shutil.copy2(source,out/source.name)
 
@@ -106,7 +109,8 @@ double evaluate(double storage, double ice, double maximum, double residual,
             workspace=out/name
             sim=flopy.mf6.MFSimulation(sim_name=name,sim_ws=workspace)
             flopy.mf6.ModflowTdis(sim,time_units='DAYS',nper=count,perioddata=[(dt,1,1.)]*count)
-            flopy.mf6.ModflowIms(sim,outer_dvclose=1e-12,inner_dvclose=1e-12,rcloserecord=1e-12,outer_maximum=100,inner_maximum=100)
+            # CG stalls just above 1e-12 in this one-cell system; BICGSTAB meets the same tolerances.
+            flopy.mf6.ModflowIms(sim,linear_acceleration='BICGSTAB',outer_dvclose=1e-12,inner_dvclose=1e-12,rcloserecord=1e-12,outer_maximum=100,inner_maximum=100)
             gwf=flopy.mf6.ModflowGwf(sim,modelname='FLOW',save_flows=True)
             flopy.mf6.ModflowGwfdis(gwf,nlay=1,nrow=1,ncol=1,delr=1.,delc=1.,top=-200.,botm=-300.)
             flopy.mf6.ModflowGwfic(gwf,strt=h0)
